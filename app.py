@@ -6,9 +6,6 @@ from tkinter import ttk
 
 from pynput.keyboard import Controller, Key
 
-KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
-
-
 keyboard = Controller()
 
 media_keys = [*filter(lambda attr: attr.startswith("media"), dir(Key))]
@@ -24,6 +21,8 @@ class EyeMovement(Enum):
 
 class Config:
 
+    KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
+
     keymap = {}
 
     def __init__(self):
@@ -31,7 +30,7 @@ class Config:
 
     def load_keymap(self):
         try:
-            with open(KEYMAP_PATH) as file:
+            with open(self.KEYMAP_PATH) as file:
                 self.keymap = json.load(file)
         except FileNotFoundError:
             self.keymap = {
@@ -44,10 +43,10 @@ class Config:
             self.dump_keymap()
 
     def dump_keymap(self):
-        parent = Path(KEYMAP_PATH).parent
+        parent = Path(self.KEYMAP_PATH).parent
         if not parent.exists():
             parent.mkdir(parents=True)
-        with open(KEYMAP_PATH, "w") as file:
+        with open(self.KEYMAP_PATH, "w") as file:
             json.dump(self.keymap, file)
 
     def set_keymap(self, movement, key):
