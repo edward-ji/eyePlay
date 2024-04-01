@@ -1,11 +1,10 @@
 import json
 import tkinter as tk
+from enum import Enum
 from pathlib import Path
 from tkinter import ttk
-from enum import Enum
 
-from pynput.keyboard import Key, Controller
-
+from pynput.keyboard import Controller, Key
 
 KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
 
@@ -40,8 +39,8 @@ class Config:
                 "up": "media_volume_up",
                 "down": "media_volume_down",
                 "left": "media_previous",
-                "right": "media_next"
-                }
+                "right": "media_next",
+            }
             self.dump_keymap()
 
     def dump_keymap(self):
@@ -75,14 +74,17 @@ class App(tk.Frame):
 
         combobox = ttk.Combobox(frame, values=media_keys)
         combobox.pack(side=tk.RIGHT)
-        
+
         selected = self.config.keymap.get(movement.value)
         if selected:
             combobox.current(media_keys.index(selected))
-        combobox.bind("<<ComboboxSelected>>",
-                      lambda _: self.config.set_keymap(movement.value, combobox.get()))
+        combobox.bind(
+            "<<ComboboxSelected>>",
+            lambda _: self.config.set_keymap(movement.value, combobox.get()),
+        )
 
         return frame
+
 
 root = tk.Tk()
 myapp = App(root)
