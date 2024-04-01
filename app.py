@@ -4,7 +4,9 @@ from enum import Enum
 from pathlib import Path
 from tkinter import ttk
 
+import serial
 from pynput.keyboard import Controller, Key
+from serial.tools import list_ports
 
 keyboard = Controller()
 
@@ -21,12 +23,29 @@ class EyeMovement(Enum):
 
 class Config:
 
+    PORT_PATH = Path.home() / ".config/spiker_playback/port"
     KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
 
+    port = None
     keymap = {}
 
     def __init__(self):
+        self.load_port()
         self.load_keymap()
+
+    def load_port(self):
+        try:
+            with open(self.PORT_PATH) as file:
+                self.port = file.read()
+            if self.port not in (port.device for port in list_ports.comports()):
+                self.port = None
+        except FileNotFoundError:
+            self.port = None
+
+    def set_port(self, port):
+        self.port = port
+        with open(self.PORT_PATH, "w") as file:
+            file.write(port)
 
     def load_keymap(self):
         try:
@@ -61,8 +80,33 @@ class App(tk.Frame):
         self.pack()
 
         self.config = Config()
+        self.serial_frame = self.create_serial_frame()
         for movement in EyeMovement:
             self.create_keymap_frame(movement)
+
+    def create_serial_frame(self):
+        frame = ttk.Frame(self)
+        frame.pack()
+
+        label = ttk.Label(frame, text="Serial port")
+        label.pack(side=tk.LEFT)
+
+        combobox = ttk.Combobox(
+            frame, values=[port.device for port in list_ports.comports()]
+        )
+        combobox.pack(side=tk.RIGHT)
+
+        selected = self.config.port
+        if selected:
+            combobox.current(
+                [port.device for port in list_ports.comports()].index(selected)
+            )
+        combobox.bind(
+            "<<ComboboxSelected>>",
+            lambda _: self.config.set_port(combobox.get()),
+        )
+
+        return frame
 
     def create_keymap_frame(self, movement):
         frame = ttk.Frame(self)

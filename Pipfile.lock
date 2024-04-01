@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "ce73eec45f35c36c72a45671e2d07a0c8d2aef1d3ffd8c7985151ff512f262aa"
+            "sha256": "b9ffde8c0ce54cf95c21dc20a4ec99ec9e05ca944b01ef09bccba628e2884f02"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -89,6 +89,14 @@
             ],
             "markers": "sys_platform == 'darwin'",
             "version": "==10.2"
+        },
+        "pyserial": {
+            "hashes": [
+                "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb",
+                "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0"
+            ],
+            "index": "pypi",
+            "version": "==3.5"
         },
         "six": {
             "hashes": [
