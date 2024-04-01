@@ -1,9 +1,13 @@
 import json
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 from enum import Enum
 
 from pynput.keyboard import Key, Controller
+
+
+KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
 
 
 keyboard = Controller()
@@ -19,15 +23,46 @@ class EyeMovement(Enum):
     RIGHT = "right"
 
 
-class App(tk.Frame):
+class Config:
 
     keymap = {}
+
+    def __init__(self):
+        self.load_keymap()
+
+    def load_keymap(self):
+        try:
+            with open(KEYMAP_PATH) as file:
+                self.keymap = json.load(file)
+        except FileNotFoundError:
+            self.keymap = {
+                "blink": "media_play_pause",
+                "up": "media_volume_up",
+                "down": "media_volume_down",
+                "left": "media_previous",
+                "right": "media_next"
+                }
+            self.dump_keymap()
+
+    def dump_keymap(self):
+        parent = Path(KEYMAP_PATH).parent
+        if not parent.exists():
+            parent.mkdir(parents=True)
+        with open(KEYMAP_PATH, "w") as file:
+            json.dump(self.keymap, file)
+
+    def set_keymap(self, movement, key):
+        self.keymap[movement] = key
+        self.dump_keymap()
+
+
+class App(tk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
         self.pack()
 
-        self.load_keymap()
+        self.config = Config()
         for movement in EyeMovement:
             self.create_keymap_frame(movement)
 
@@ -41,35 +76,13 @@ class App(tk.Frame):
         combobox = ttk.Combobox(frame, values=media_keys)
         combobox.pack(side=tk.RIGHT)
         
-        selected = self.keymap.get(movement.value)
+        selected = self.config.keymap.get(movement.value)
         if selected:
             combobox.current(media_keys.index(selected))
         combobox.bind("<<ComboboxSelected>>",
-                      lambda _: self.set_keymap(movement.value, combobox.get()))
+                      lambda _: self.config.set_keymap(movement.value, combobox.get()))
 
         return frame
-
-    def load_keymap(self):
-        try:
-            with open("keymap.json") as file:
-                self.keymap = json.load(file)
-        except FileNotFoundError:
-            self.keymap = {
-                "blink": "media_play_pause",
-                "up": "media_volume_up",
-                "down": "media_volume_down",
-                "left": "media_previous",
-                "right": "media_next"
-                }
-            self.dump_keymap()
-
-    def dump_keymap(self):
-        with open("keymap.json", "w") as file:
-            json.dump(self.keymap, file)
-
-    def set_keymap(self, movement, key):
-        self.keymap[movement] = key
-        self.dump_keymap()
 
 root = tk.Tk()
 myapp = App(root)
