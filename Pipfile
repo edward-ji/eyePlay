@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 pynput = "*"
 pyserial = "*"
+nbdev = "*"
 
 [dev-packages]
 
