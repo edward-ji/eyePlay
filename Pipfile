@@ -6,9 +6,10 @@ name = "pypi"
 [packages]
 pynput = "*"
 pyserial = "*"
-nbdev = "*"
 
 [dev-packages]
+nbdev = "*"
+jupyterlab = "*"
 
 [requires]
 python_version = "3.12"

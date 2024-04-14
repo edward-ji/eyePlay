@@ -12,7 +12,7 @@ Then, simply run the following command to install all the dependencies in a new
 environment,
 
 ```
-pipenv install
+pipenv install --dev
 ```
 
 ### Optional pre-commit hooks
