@@ -12,6 +12,9 @@ nbdev = "*"
 jupyterlab = "*"
 numpy = "*"
 matplotlib = "*"
+tsfeatures = "*"
+tqdm = "*"
+pre-commit = "*"
 
 [requires]
 python_version = "3.12"
