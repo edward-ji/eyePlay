@@ -1,4 +1,5 @@
 import json
+import queue
 import time
 import threading
 import tkinter as tk
@@ -23,7 +24,9 @@ media_keys = [*filter(lambda attr: attr.startswith("media"), dir(Key))]
 SIGMA = 25
 BAUDRATE = 230400
 SAMPLE_FREQ = 20000  # samples per second
-WINDOW_SECONDS = 0.1
+CHUNK_SECONDS = 0.1
+CHUNK_SIZE = int(SAMPLE_FREQ * CHUNK_SECONDS)
+WINDOW_SECONDS = 1.0
 WINDOW_SIZE = int(SAMPLE_FREQ * WINDOW_SECONDS)
 BUFFER_SECONDS = 2.5
 BUFFER_SIZE = int(SAMPLE_FREQ * BUFFER_SECONDS)
@@ -110,6 +113,7 @@ class Config:
 config = Config()
 data = np.full(BUFFER_SIZE, 500.0)
 event = np.zeros_like(data)
+chunks = queue.Queue()
 data_time = time.time()
 
 
@@ -118,46 +122,37 @@ def process():
     while True:
         if config.serial is None:
             continue
-        read_bytes = iter(config.serial.read(WINDOW_SIZE))
-        data_list = []
+        read_bytes = iter(config.serial.read(CHUNK_SIZE))
+        chunk = []
         while (raw_byte := next(read_bytes, None)) is not None:
             raw_int = int(raw_byte)
             if raw_int > 0x7F:
-                data_list.append((np.bitwise_and(raw_byte, 0x7F) << 7)
+                chunk.append((np.bitwise_and(raw_byte, 0x7F) << 7)
                             + int(next(read_bytes)))
-        if len(data_list) == 0:
+        if len(chunk) == 0:
             continue
-        data_list = np.array(data_list)
-        data_list = np.fft.fftshift(np.fft.fft(data_list))
-        t = WINDOW_SIZE / 20000.0 * np.linspace(0, 1, len(data_list))
-        dt = t[1]-t[0]  # time interval
-        maxf = 1/dt     # maximum frequency
-        df = 1/np.max(t)   # frequency interval
-        f_fft = np.arange(-maxf/2,maxf/2+df,df) - 1
-        gaussian_filter = np.exp(-f_fft ** 2 / SIGMA ** 2)
-        data_list = np.fft.ifft(np.fft.ifftshift(data_list * gaussian_filter))
-        data_time = time.time()
-        data = np.append(data[len(data_list):], np.real(data_list))
+        chunk = np.array(chunk)
+        chunk = np.fft.fftshift(np.fft.fft(chunk))
+        max_freq = len(chunk) / CHUNK_SECONDS
+        freq_list = np.linspace(-max_freq / 2, max_freq / 2, len(chunk))
+        gaussian_filter = np.exp(-freq_list ** 2 / SIGMA ** 2)
+        chunk = np.fft.ifft(np.fft.ifftshift(chunk * gaussian_filter))
+        chunks.put(chunk)
+        data = np.append(data[len(chunk):], np.real(chunk))
+        myapp.update_plot()
 
 
 def classify():
     global event
 
-    slide_sec = 1.0
-    slide_size = int(slide_sec * SAMPLE_FREQ)
     minimum_sec = 0.2
     minimum_size = int(10_000 * minimum_sec)
-    last_data_time = data_time
     std_threshold = 300
 
     while True:
-        if last_data_time == data_time:
-            continue
-        last_data_time = data_time
-
         mean = np.mean(data)
         error = data - mean
-        std = np.convolve(error ** 2, np.ones(slide_size) / slide_size,
+        std = np.convolve(error ** 2, np.ones(WINDOW_SIZE) / WINDOW_SIZE,
                           mode="valid")
         event = std > std_threshold
         idx = np.where(np.diff(np.r_[False, event, False]))[0]
@@ -168,7 +163,7 @@ def classify():
             continue
         if end - start < minimum_size:
             continue
-        clip = data[start - slide_size // 2:end + slide_size // 2]
+        clip = data[start - WINDOW_SIZE // 2:end + WINDOW_SIZE // 2]
         high_peaks, _ = find_peaks(clip, prominence=50)
         low_peaks, _ = find_peaks(-clip, prominence=50)
         if high_peaks.size == 0 or low_peaks.size == 0:
@@ -261,8 +256,6 @@ class App(tk.Frame):
             event * (np.max(data) - np.min(data)) + np.min(data), color="red"
         )
         self.canvas.draw()
-
-        root.after(int(WINDOW_SECONDS * 1_000), self.update_plot)
 
 
 root = tk.Tk()
