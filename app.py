@@ -1,6 +1,5 @@
 import json
 import queue
-import time
 import threading
 import tkinter as tk
 from enum import Enum
@@ -28,7 +27,7 @@ CHUNK_SECONDS = 0.1
 CHUNK_SIZE = int(SAMPLE_FREQ * CHUNK_SECONDS)
 WINDOW_SECONDS = 1.0
 WINDOW_SIZE = int(SAMPLE_FREQ * WINDOW_SECONDS)
-BUFFER_SECONDS = 2.5
+BUFFER_SECONDS = 10.0
 BUFFER_SIZE = int(SAMPLE_FREQ * BUFFER_SECONDS)
 
 
@@ -112,9 +111,7 @@ class Config:
 
 config = Config()
 data = np.full(BUFFER_SIZE, 500.0)
-event = np.zeros_like(data)
 chunks = queue.Queue()
-data_time = time.time()
 
 
 def process():
@@ -143,49 +140,65 @@ def process():
 
 
 def classify():
-    global event
+    window = np.zeros(WINDOW_SIZE)
+    event = None
 
-    minimum_sec = 0.2
-    minimum_size = int(10_000 * minimum_sec)
-    std_threshold = 300
+    while (chunk := chunks.get()) is not None:
+        window = np.append(window[len(chunk):], chunk)
 
-    while True:
-        mean = np.mean(data)
-        error = data - mean
-        std = np.convolve(error ** 2, np.ones(WINDOW_SIZE) / WINDOW_SIZE,
-                          mode="valid")
-        event = std > std_threshold
-        idx = np.where(np.diff(np.r_[False, event, False]))[0]
-        if len(idx) < 2:
-            continue
-        start, end = idx[-2:]
-        if end != len(event):
-            continue
-        if end - start < minimum_size:
-            continue
-        clip = data[start - WINDOW_SIZE // 2:end + WINDOW_SIZE // 2]
-        high_peaks, _ = find_peaks(clip, prominence=50)
-        low_peaks, _ = find_peaks(-clip, prominence=50)
-        if high_peaks.size == 0 or low_peaks.size == 0:
-            continue
-        peaks = np.sort(np.r_[high_peaks, low_peaks])
-        avg_peak_interval = np.mean(np.diff(peaks))
-        if avg_peak_interval < 1000:
-            movement = EyeMovement.BLINK
-        else:
-            if high_peaks[0] < low_peaks[0]:
-                movement = EyeMovement.RIGHT
+        # continuous event detection
+        # print(np.std(window), np.mean(window), np.max(window), np.min(window),
+        #       window.size)
+        if np.std(window) > np.sqrt(300):
+            # print("window event detected")
+            if event is None:
+                event = window
+                print("event start")
             else:
+                event = np.append(event, window)
+                # print("event continue")
+            continue
+        elif event is None:
+            # print("window has no event")
+            continue
+
+        # event classification
+        print("event end")
+
+        high_peaks, _ = find_peaks(event, prominence=50)
+        low_peaks, _ = find_peaks(-event, prominence=50)
+        if len(high_peaks) == 0 or len(low_peaks) == 0:
+            event = None
+            continue
+        peaks = np.sort(np.concatenate((high_peaks, low_peaks)))
+        peak_mean_diff = np.diff(peaks).mean()
+        print(f"{peak_mean_diff = }")
+        if peak_mean_diff < 200:
+            movement = EyeMovement.BLINK
+            movement *= (len(peaks) - 1) // 3
+        else:
+            high_peaks, _ = find_peaks(event, prominence=80)
+            low_peaks, _ = find_peaks(-event, prominence=80)
+            if len(high_peaks) < 1 or len(low_peaks) < 1:
+                event = None
+                continue
+            if high_peaks[0] < low_peaks[0]:
                 movement = EyeMovement.LEFT
-        movement *= peaks.size // 2
+            else:
+                movement = EyeMovement.RIGHT
+            movement *= (len(high_peaks) + len(low_peaks) - 1) // 2
         action(movement)
+
+        # reset
+        event = None
 
 
 def action(movement):
-    print(f"action: {movement.value}, {config.keymap.get(movement.value)}")
-    key = config.keymap.get(movement.value)
-    if key:
-        print("key")
+    print(f"{movement.value = }")
+    key_str = config.keymap.get(movement.value)
+    key = key_str and getattr(Key, key_str)
+    if key is not None:
+        keyboard.press(key)
 
 
 class App(tk.Frame):
@@ -251,10 +264,6 @@ class App(tk.Frame):
         ax = self.figure.gca()
         ax.clear()
         ax.plot(data)
-        ax.plot(
-            np.arange(len(data) - len(event), len(data)),
-            event * (np.max(data) - np.min(data)) + np.min(data), color="red"
-        )
         self.canvas.draw()
 
 
