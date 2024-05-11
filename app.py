@@ -2,6 +2,7 @@ import json
 import queue
 import threading
 import tkinter as tk
+from functools import partial
 from enum import Enum
 from pathlib import Path
 from tkinter import ttk
@@ -18,7 +19,16 @@ from serial.tools import list_ports
 mpl.use("TkAgg")
 
 keyboard = Controller()
-media_keys = [*filter(lambda attr: attr.startswith("media"), dir(Key))]
+
+media_keys = {
+    "None": lambda: None,
+    "Play/Pause": partial(keyboard.press, Key.media_play_pause),
+    "Previous": partial(keyboard.press, Key.media_previous),
+    "Next": partial(keyboard.press, Key.media_next),
+    "Volume Up": partial(keyboard.press, Key.media_volume_up),
+    "Volume Down": partial(keyboard.press, Key.media_volume_down),
+    "Mute": partial(keyboard.press, Key.media_volume_mute),
+    }
 
 SIGMA = 25
 BAUDRATE = 230400
@@ -91,9 +101,9 @@ class Config:
                 self.keymap = json.load(file)
         except FileNotFoundError:
             self.keymap = {
-                "blink": "media_play_pause",
-                "left": "media_previous",
-                "right": "media_next",
+                "blink": "Play/Pause",
+                "left": "Previous",
+                "right": "Next",
             }
             self.dump_keymap()
 
@@ -193,12 +203,18 @@ def classify():
         event = None
 
 
+action_toggle = False
+
+
 def action(movement):
-    print(f"{movement.value = }")
-    key_str = config.keymap.get(movement.value)
-    key = key_str and getattr(Key, key_str)
+    global action_toggle
+    app.popup(movement.value)
+    key = config.keymap.get(movement.value)
+    if movement == EyeMovement.DOUBLE_BLINK:
+        action_toggle = not action_toggle
+        app.popup("Action " + ("enabled" if action_toggle else "disabled"))
     if key is not None:
-        keyboard.press(key)
+        media_keys[key]()
 
 
 class App(tk.Frame):
@@ -208,31 +224,53 @@ class App(tk.Frame):
         self.pack()
 
         self.serial_frame = self.create_serial_frame()
-        for movement in EyeMovement:
-            self.create_keymap_frame(movement)
+        self.keymap_frames = ttk.Frame(self)
+        self.keymap_frames.pack()
+        for i, movement in enumerate([
+            EyeMovement.BLINK,
+            EyeMovement.LEFT,
+            EyeMovement.RIGHT,
+            EyeMovement.DOUBLE_LEFT,
+            EyeMovement.DOUBLE_RIGHT
+            ]):
+            self.create_keymap_frame(i, movement)
 
         self.figure = plt.figure(figsize=(12, 4))
         self.canvas = FigureCanvasTkAgg(self.figure, self)
         self.canvas.get_tk_widget().pack()
         self.update_plot()
 
+        self.popup_frame = ttk.Frame(self)
+        self.popup_frame.place(relx=1, rely=0, anchor=tk.NE)
+        self.popup("Double blink to active/deactivate actions")
+
+
+    def popup(self, message):
+        label = tk.Label(self.popup_frame,
+                         text=message,
+                         bg="lightgrey",
+                         fg="black",
+                         )
+        label.pack(anchor=tk.E, pady=(0, 5))
+        self.after(5_000, label.destroy)
+
     def create_serial_frame(self):
         frame = ttk.Frame(self)
-        frame.pack()
+        frame.pack(anchor=tk.W, padx=5, pady=5)
 
-        label = ttk.Label(frame, text="Serial port")
+        label = ttk.Label(frame, text="Device")
         label.pack(side=tk.LEFT)
 
-        combobox = ttk.Combobox(
-            frame, values=[port.device for port in list_ports.comports()]
-        )
+        devices = [port.device for port in list_ports.comports()]
+        combobox = ttk.Combobox(frame, values=devices)
         combobox.pack(side=tk.RIGHT)
 
         selected = config.port
-        if selected:
-            combobox.current(
-                [port.device for port in list_ports.comports()].index(selected)
-            )
+        if selected and selected in devices:
+            combobox.current(devices.index(selected))
+        else:
+            self.after(100, partial(self.popup,
+                                    "Device not found, please select one"))
         combobox.bind(
             "<<ComboboxSelected>>",
             lambda _: config.set_port(combobox.get()),
@@ -240,19 +278,22 @@ class App(tk.Frame):
 
         return frame
 
-    def create_keymap_frame(self, movement):
-        frame = ttk.Frame(self)
-        frame.pack()
+    def create_keymap_frame(self, i, movement):
+        frame = ttk.Frame(self.keymap_frames)
+        frame.grid(row=i // 3, column=i % 3, padx=5, pady=5)
 
-        label = ttk.Label(frame, text=movement.value)
+        text = movement.value.replace("_", " ").capitalize()
+        label = ttk.Label(frame, text=text, width=9, anchor=tk.W)
         label.pack(side=tk.LEFT)
 
-        combobox = ttk.Combobox(frame, values=media_keys)
+        combobox = ttk.Combobox(frame, values=[*media_keys.keys()])
         combobox.pack(side=tk.RIGHT)
 
         selected = config.keymap.get(movement.value)
         if selected:
-            combobox.current(media_keys.index(selected))
+            combobox.current(list(media_keys).index(selected))
+        else:
+            combobox.current(0)
         combobox.bind(
             "<<ComboboxSelected>>",
             lambda _: config.set_keymap(movement.value, combobox.get()),
@@ -268,8 +309,8 @@ class App(tk.Frame):
 
 
 root = tk.Tk()
-myapp = App(root)
+app = App(root)
 
 threading.Thread(target=process, daemon=True).start()
 threading.Thread(target=classify, daemon=True).start()
-myapp.mainloop()
+app.mainloop()
