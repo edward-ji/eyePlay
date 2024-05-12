@@ -181,22 +181,16 @@ def classify():
             event = None
             continue
         peaks = np.sort(np.concatenate((high_peaks, low_peaks)))
-        peak_mean_diff = np.diff(peaks).mean()
-        print(f"{peak_mean_diff = }")
-        if peak_mean_diff < 200:
+        min_diff_peak = np.min(np.diff(peaks))
+        if min_diff_peak < 2065:
             movement = EyeMovement.BLINK
-            movement *= (len(peaks) - 1) // 3
         else:
-            high_peaks, _ = find_peaks(event, prominence=80)
-            low_peaks, _ = find_peaks(-event, prominence=80)
-            if len(high_peaks) < 1 or len(low_peaks) < 1:
-                event = None
-                continue
-            if high_peaks[0] < low_peaks[0]:
+            if np.mean(high_peaks) < np.mean(low_peaks):
                 movement = EyeMovement.LEFT
             else:
                 movement = EyeMovement.RIGHT
-            movement *= (len(high_peaks) + len(low_peaks) - 1) // 2
+        if len(event) > 34222:
+            movement *= 2
         action(movement)
 
         # reset
