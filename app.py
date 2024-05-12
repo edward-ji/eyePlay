@@ -146,7 +146,7 @@ def process():
         chunk = np.fft.ifft(np.fft.ifftshift(chunk * gaussian_filter))
         chunks.put(chunk)
         data = np.append(data[len(chunk):], np.real(chunk))
-        myapp.update_plot()
+        app.update_plot()
 
 
 def classify():
