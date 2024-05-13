@@ -130,7 +130,11 @@ def process():
     while True:
         if config.serial is None:
             continue
-        read_bytes = iter(config.serial.read(CHUNK_SIZE))
+        try:
+            read_bytes = iter(config.serial.read(CHUNK_SIZE))
+        except serial.SerialException:
+            config.load_port()
+            continue
         chunk = []
         while (raw_byte := next(read_bytes, None)) is not None:
             raw_int = int(raw_byte)
