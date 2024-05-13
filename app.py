@@ -1,5 +1,6 @@
 import json
 import queue
+import time
 import threading
 import tkinter as tk
 from functools import partial
@@ -35,7 +36,7 @@ BAUDRATE = 230400
 SAMPLE_FREQ = 20000  # samples per second
 CHUNK_SECONDS = 0.1
 CHUNK_SIZE = int(SAMPLE_FREQ * CHUNK_SECONDS)
-WINDOW_SECONDS = 1.0
+WINDOW_SECONDS = 0.8
 WINDOW_SIZE = int(SAMPLE_FREQ * WINDOW_SECONDS)
 BUFFER_SECONDS = 10.0
 BUFFER_SIZE = int(SAMPLE_FREQ * BUFFER_SECONDS)
@@ -134,8 +135,11 @@ def process():
         while (raw_byte := next(read_bytes, None)) is not None:
             raw_int = int(raw_byte)
             if raw_int > 0x7F:
+                next_byte = next(read_bytes, None)
+                if next_byte is None:
+                    break
                 chunk.append((np.bitwise_and(raw_byte, 0x7F) << 7)
-                            + int(next(read_bytes)))
+                             + int(next_byte))
         if len(chunk) == 0:
             continue
         chunk = np.array(chunk)
@@ -144,7 +148,7 @@ def process():
         freq_list = np.linspace(-max_freq / 2, max_freq / 2, len(chunk))
         gaussian_filter = np.exp(-freq_list ** 2 / SIGMA ** 2)
         chunk = np.fft.ifft(np.fft.ifftshift(chunk * gaussian_filter))
-        chunks.put(chunk)
+        chunks.put(np.real(chunk))
         data = np.append(data[len(chunk):], np.real(chunk))
         app.update_plot()
 
@@ -159,13 +163,13 @@ def classify():
         # continuous event detection
         # print(np.std(window), np.mean(window), np.max(window), np.min(window),
         #       window.size)
-        if np.std(window) > np.sqrt(300):
+        if np.var(window) > 250:
             # print("window event detected")
             if event is None:
                 event = window
                 print("event start")
             else:
-                event = np.append(event, window)
+                event = np.append(event, chunk)
                 # print("event continue")
             continue
         elif event is None:
@@ -174,22 +178,26 @@ def classify():
 
         # event classification
         print("event end")
+        event = event[WINDOW_SIZE // 2:-WINDOW_SIZE // 2]
+        np.save(f"analysis/data/live/event_{time.time()}.npy", event)
 
         high_peaks, _ = find_peaks(event, prominence=50)
         low_peaks, _ = find_peaks(-event, prominence=50)
         if len(high_peaks) == 0 or len(low_peaks) == 0:
-            event = None
-            continue
-        peaks = np.sort(np.concatenate((high_peaks, low_peaks)))
-        min_diff_peak = np.min(np.diff(peaks))
-        if min_diff_peak < 2065:
             movement = EyeMovement.BLINK
         else:
-            if np.mean(high_peaks) < np.mean(low_peaks):
-                movement = EyeMovement.LEFT
+            peaks = np.sort(np.concatenate((high_peaks, low_peaks)))
+            min_diff_peak = np.min(np.diff(peaks))
+            if min_diff_peak < 2065:
+                movement = EyeMovement.BLINK
             else:
-                movement = EyeMovement.RIGHT
-        if len(event) > 34222:
+                if np.mean(high_peaks) < np.mean(low_peaks):
+                    movement = EyeMovement.LEFT
+                else:
+                    movement = EyeMovement.RIGHT
+        smoothed = np.convolve(event, np.ones(1000) / 1000, mode="valid")
+        smoothed_peaks, _ = find_peaks(smoothed, prominence=50)
+        if len(smoothed_peaks) >= 2:
             movement *= 2
         action(movement)
 
@@ -202,12 +210,13 @@ action_toggle = False
 
 def action(movement):
     global action_toggle
-    app.popup(movement.value)
+    print(f"{time.time()}: {movement.value}")
     key = config.keymap.get(movement.value)
     if movement == EyeMovement.DOUBLE_BLINK:
         action_toggle = not action_toggle
         app.popup("Action " + ("enabled" if action_toggle else "disabled"))
-    if key is not None:
+    if key is not None and action_toggle:
+        print("action")
         media_keys[key]()
 
 
