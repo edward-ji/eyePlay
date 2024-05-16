@@ -17,18 +17,68 @@ from pynput.keyboard import Controller, Key
 from scipy.signal import find_peaks
 from serial.tools import list_ports
 
+import spotipy
+import spotipy.util as util
+
+# Set your Spotify username
+USERNAME = 'Nhat Huy Le'
+
+# Set your Spotify client ID and client secret
+CLIENT_ID = '2b0cdf67c2da453fa658c15c7947ba42'
+CLIENT_SECRET = '********************************'
+REDIRECT_URI = 'http://localhost:3000'
+
+# Scope for controlling playback
+SCOPE = 'user-read-playback-state,user-modify-playback-state'
+
+# Get OAuth token
+token = util.prompt_for_user_token(USERNAME,
+                                   scope=SCOPE,
+                                   client_id=CLIENT_ID,
+                                   client_secret=CLIENT_SECRET,
+                                   redirect_uri=REDIRECT_URI)
+
+# Create Spotify object
+sp = spotipy.Spotify(auth=token)
+
+def playpause_playback():
+    if sp.current_playback()['is_playing']:
+        sp.pause_playback()
+    else:
+        sp.start_playback()
+
+
+def next_track():
+    sp.next_track()
+
+def previous_track():
+    sp.previous_track()
+
+#volume up
+def volume_up():
+    current_volume = sp.current_playback()['device']['volume_percent']
+    sp.volume(current_volume + 10)
+
+#volume down
+def volume_down():
+    current_volume = sp.current_playback()['device']['volume_percent']
+    sp.volume(current_volume - 10)
+
+def mute():
+    sp.volume(0)
+
 mpl.use("TkAgg")
 
 keyboard = Controller()
 
 media_keys = {
     "None": lambda: None,
-    "Play/Pause": partial(keyboard.press, Key.media_play_pause),
-    "Previous": partial(keyboard.press, Key.media_previous),
-    "Next": partial(keyboard.press, Key.media_next),
-    "Volume Up": partial(keyboard.press, Key.media_volume_up),
-    "Volume Down": partial(keyboard.press, Key.media_volume_down),
-    "Mute": partial(keyboard.press, Key.media_volume_mute),
+    "Play/Pause": playpause_playback,
+    "Previous": previous_track,
+    "Next": next_track,
+    "Volume Up": volume_up,
+    "Volume Down": volume_down,
+    "Mute": mute,
     }
 
 SIGMA = 25
@@ -70,8 +120,8 @@ class EyeMovement(Enum):
 
 class Config:
 
-    PORT_PATH = Path.home() / ".config/spiker_playback/port"
-    KEYMAP_PATH = Path.home() / ".config/spiker_playback/keymap.json"
+    PORT_PATH = ".config/spiker_playback/port"
+    KEYMAP_PATH = ".config/spiker_playback/keymap.json"
 
     def __init__(self):
         self.load_port()
@@ -183,7 +233,12 @@ def classify():
         # event classification
         print("event end")
         event = event[WINDOW_SIZE // 2:-WINDOW_SIZE // 2]
+        if len(event) <= int(SAMPLE_FREQ * 0.2):
+            event = None
+            continue
         np.save(f"analysis/data/live/event_{time.time()}.npy", event)
+        
+        smoothed = np.convolve(event, np.ones(500) / 500, mode="valid")
 
         high_peaks, _ = find_peaks(event, prominence=50)
         low_peaks, _ = find_peaks(-event, prominence=50)
@@ -199,7 +254,6 @@ def classify():
                     movement = EyeMovement.LEFT
                 else:
                     movement = EyeMovement.RIGHT
-        smoothed = np.convolve(event, np.ones(1000) / 1000, mode="valid")
         smoothed_peaks, _ = find_peaks(smoothed, prominence=50)
         if len(smoothed_peaks) >= 2:
             movement *= 2
