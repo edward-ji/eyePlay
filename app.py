@@ -1,10 +1,10 @@
 import json
 import queue
-import time
 import threading
+import time
 import tkinter as tk
-from functools import partial
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from tkinter import ttk
 
@@ -12,23 +12,19 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import serial
+import spotipy
+import spotipy.util as util
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from pynput.keyboard import Controller, Key
 from scipy.signal import find_peaks
 from serial.tools import list_ports
 
-import spotipy
-import spotipy.util as util
 
-# Set your Spotify username
+# Spotify API configuration
 USERNAME = 'Nhat Huy Le'
-
-# Set your Spotify client ID and client secret
 CLIENT_ID = '2b0cdf67c2da453fa658c15c7947ba42'
 CLIENT_SECRET = '********************************'
 REDIRECT_URI = 'http://localhost:3000'
-
-# Scope for controlling playback
 SCOPE = 'user-read-playback-state,user-modify-playback-state'
 
 # Get OAuth token
@@ -42,11 +38,14 @@ token = util.prompt_for_user_token(USERNAME,
 sp = spotipy.Spotify(auth=token)
 
 def playpause_playback():
-    if sp.current_playback()['is_playing']:
-        sp.pause_playback()
+    playback = sp.current_playback()
+    if playback is not None:
+        if playback['is_playing']:
+            sp.pause_playback()
+        else:
+            sp.start_playback()
     else:
         sp.start_playback()
-
 
 def next_track():
     sp.next_track()
@@ -54,14 +53,18 @@ def next_track():
 def previous_track():
     sp.previous_track()
 
-#volume up
 def volume_up():
-    current_volume = sp.current_playback()['device']['volume_percent']
+    playback = sp.current_playback()
+    if playback is None:
+        return
+    current_volume = playback['device']['volume_percent']
     sp.volume(current_volume + 10)
 
-#volume down
 def volume_down():
-    current_volume = sp.current_playback()['device']['volume_percent']
+    playback = sp.current_playback()
+    if playback is None:
+        return
+    current_volume = playback['device']['volume_percent']
     sp.volume(current_volume - 10)
 
 def mute():
@@ -73,12 +76,18 @@ keyboard = Controller()
 
 media_keys = {
     "None": lambda: None,
-    "Play/Pause": playpause_playback,
-    "Previous": previous_track,
-    "Next": next_track,
-    "Volume Up": volume_up,
-    "Volume Down": volume_down,
-    "Mute": mute,
+    "Play/Pause": partial(keyboard.press, Key.media_play_pause),
+    "Previous": partial(keyboard.press, Key.media_previous),
+    "Next": partial(keyboard.press, Key.media_next),
+    "Volume Up": partial(keyboard.press, Key.media_volume_up),
+    "Volume Down": partial(keyboard.press, Key.media_volume_down),
+    "Mute": partial(keyboard.press, Key.media_volume_mute),
+    "Spotify Play/Pause": playpause_playback,
+    "Spotify Previous": previous_track,
+    "Spotify Next": next_track,
+    "Spotify Volume Up": volume_up,
+    "Spotify Volume Down": volume_down,
+    "Spotify Mute": mute,
     }
 
 SIGMA = 25
@@ -208,20 +217,19 @@ def process():
 
 
 def classify():
+    SMOOTH_WINDOW_SEC = 0.025
+    SMOOTH_WINDOW_SIZE = int(SMOOTH_WINDOW_SEC * SAMPLE_FREQ)
+
     window = np.zeros(WINDOW_SIZE)
     event = None
 
     while (chunk := chunks.get()) is not None:
         window = np.append(window[len(chunk):], chunk)
 
-        # continuous event detection
-        # print(np.std(window), np.mean(window), np.max(window), np.min(window),
-        #       window.size)
         if np.var(window) > 250:
             # print("window event detected")
             if event is None:
                 event = window
-                print("event start")
             else:
                 event = np.append(event, chunk)
                 # print("event continue")
@@ -231,15 +239,11 @@ def classify():
             continue
 
         # event classification
-        print("event end")
         event = event[WINDOW_SIZE // 2:-WINDOW_SIZE // 2]
         if len(event) <= int(SAMPLE_FREQ * 0.2):
             event = None
             continue
-        np.save(f"analysis/data/live/event_{time.time()}.npy", event)
         
-        smoothed = np.convolve(event, np.ones(500) / 500, mode="valid")
-
         high_peaks, _ = find_peaks(event, prominence=50)
         low_peaks, _ = find_peaks(-event, prominence=50)
         if len(high_peaks) == 0 or len(low_peaks) == 0:
@@ -254,6 +258,9 @@ def classify():
                     movement = EyeMovement.LEFT
                 else:
                     movement = EyeMovement.RIGHT
+
+        smooth_filter = np.ones(SMOOTH_WINDOW_SIZE) / SMOOTH_WINDOW_SIZE
+        smoothed = np.convolve(event, smooth_filter, mode="valid")
         smoothed_peaks, _ = find_peaks(smoothed, prominence=50)
         if len(smoothed_peaks) >= 2:
             movement *= 2
@@ -274,7 +281,6 @@ def action(movement):
         action_toggle = not action_toggle
         app.popup("Action " + ("enabled" if action_toggle else "disabled"))
     if key is not None and action_toggle:
-        print("action")
         media_keys[key]()
 
 
