@@ -270,17 +270,13 @@ def classify():
         event = None
 
 
-action_toggle = False
-
-
 def action(movement):
-    global action_toggle
     print(f"{time.time()}: {movement.value}")
     key = config.keymap.get(movement.value)
     if movement == EyeMovement.DOUBLE_BLINK:
-        action_toggle = not action_toggle
-        app.popup("Action " + ("enabled" if action_toggle else "disabled"))
-    if key is not None and action_toggle:
+        app.action_toggle.set(not app.action_toggle.get())
+        app.popup("Action " + ("enabled" if app.action_toggle else "disabled"))
+    if key is not None and app.action_toggle.get():
         media_keys[key]()
 
 
@@ -291,6 +287,9 @@ class App(tk.Frame):
         self.pack()
 
         self.serial_frame = self.create_serial_frame()
+
+        self.action_frame = self.create_action_frame()
+
         self.keymap_frames = ttk.Frame(self)
         self.keymap_frames.pack()
         for i, movement in enumerate([
@@ -311,6 +310,7 @@ class App(tk.Frame):
         self.popup_frame.place(relx=1, rely=0, anchor=tk.NE)
         self.popup("Double blink to active/deactivate actions")
 
+        self.after(2_000, lambda: self.action_toggle.set(True))
 
     def popup(self, message):
         label = tk.Label(self.popup_frame,
@@ -342,6 +342,30 @@ class App(tk.Frame):
             "<<ComboboxSelected>>",
             lambda _: config.set_port(combobox.get()),
         )
+
+        return frame
+
+    def create_action_frame(self):
+        self.action_toggle = action_toggle = tk.BooleanVar()
+
+        frame = ttk.Frame(self)
+        frame.pack(anchor=tk.W, padx=5, pady=5)
+
+        label = ttk.Label(frame, text="Actions")
+        label.pack(side=tk.LEFT)
+
+        indicator = tk.Label(frame, text="OFF", fg="white", bg="red")
+        indicator.pack(side=tk.RIGHT)
+
+        def on_toggle(*_):
+            if action_toggle.get():
+                indicator.config(text="ON", background="green")
+                self.popup("Actions enabled")
+            else:
+                indicator.config(text="OFF", background="red")
+                self.popup("Actions disabled")
+
+        action_toggle.trace_add("write", on_toggle)
 
         return frame
 
