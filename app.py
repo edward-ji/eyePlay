@@ -275,9 +275,11 @@ def action(movement):
     key = config.keymap.get(movement.value)
     if movement == EyeMovement.DOUBLE_BLINK:
         app.action_toggle.set(not app.action_toggle.get())
-        app.popup("Action " + ("enabled" if app.action_toggle else "disabled"))
     if key is not None and app.action_toggle.get():
-        media_keys[key]()
+        try:
+            media_keys[key]()
+        except:
+            pass
 
 
 class App(tk.Frame):
@@ -309,8 +311,6 @@ class App(tk.Frame):
         self.popup_frame = ttk.Frame(self)
         self.popup_frame.place(relx=1, rely=0, anchor=tk.NE)
         self.popup("Double blink to active/deactivate actions")
-
-        self.after(2_000, lambda: self.action_toggle.set(True))
 
     def popup(self, message):
         label = tk.Label(self.popup_frame,
@@ -396,10 +396,17 @@ class App(tk.Frame):
         ax = self.figure.gca()
         ax.clear()
         ax.plot(data)
+        ax.grid(True, axis="y")
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.get_xaxis().set_ticks([])
         self.canvas.draw()
 
 
 root = tk.Tk()
+root.title("eyePlay")
 app = App(root)
 
 threading.Thread(target=process, daemon=True).start()
