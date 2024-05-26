@@ -2,14 +2,36 @@
 
 Music playback control using SpikerBox.
 
-## Development
+## Project Structure
 
-### Environment
+There are two main files in the root directory,
+
+- `analysis.ipynb` contains code for the analysis that helps reach the final
+  model, and
+- `app.py` contains code for the GUI and final model running in real time
+
+The `data` directory contains the original CSV files from the labs. They are
+labelled in weeks.
+
+## Deployment
 
 If you don't have [pipenv], follow the official instruction.
 
 Then, simply run the following command to install all the dependencies in a new
 environment,
+
+```
+pipenv install
+```
+
+Then, you can start the application with `python app.py`.
+
+## Development
+
+_If you want to run the notebook, you need the development dependencies._
+
+Simply run the following command to install all the dependencies in a new
+environment for development,
 
 ```
 pipenv install --dev
