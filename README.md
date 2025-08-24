@@ -1,6 +1,22 @@
-# Spiker Playback
+# eyePlay
 
-Music playback control using SpikerBox.
+![Main](assets/main.png)
+
+Enabling media playback for physically impaired users through eye movement
+control.
+
+## Features
+
+- **Eye Movement Control**: Uses electrooculography to detect eye movements and
+  blinks
+- **Customizable Controls**: 5 configurable actions mapped to eye movements:
+  - Double Blink: Initiate system
+  - Blink: Play/Pause
+  - Look Left/Right: Previous/Next Song
+  - Double look Left/Right: Volume Down/Up
+- **Multiple Playback Options**: Can operate using both Spotify API or device
+  playback
+- **Real-time Processing**: Live signal processing with visual feedback
 
 ## Project Structure
 
